@@ -17,10 +17,9 @@ type Client struct {
 	conn *net.Conn
 	// prefix for statsd name
 	prefix string
-	// write mutex
+	// channels
 	data chan string
 	quit chan bool
-	mutex sync.Mutex
 
 }
 
