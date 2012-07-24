@@ -5,7 +5,7 @@ import (
 	"net"
 	"math/rand"
 	"fmt"
-	"errors"
+	//"errors"
 	"sync"
 	"time"
 )
@@ -18,13 +18,16 @@ type Client struct {
 	// prefix for statsd name
 	prefix string
 	// write mutex
+	data chan string
+	quit chan bool
 	mutex sync.Mutex
 
 }
 
 // Close closes the connection and cleans up.
 func (s *Client) Close() error {
-	// flush any outstanding data
+	s.quit <- true
+	close(s.quit)
 	s.buf.Flush()
 	s.buf = nil
 	err := (*s.conn).Close()
@@ -86,25 +89,14 @@ func (s *Client) submit(stat string, value string, rate float32) error {
 		stat = fmt.Sprintf("%s.%s", s.prefix, stat)
 	}
 
-	data := fmt.Sprintf("%s:%s", stat, value)
-
-	_, err := s.send([]byte(data))
-	if err != nil {
-		return err
-	}
+	s.data <- fmt.Sprintf("%s:%s", stat, value)
 	return nil
 }
 
-// sends the data to the server endpoint over the net.Conn
-func (s *Client) send(data []byte) (int, error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+func (s *Client) send(data string) (int, error) {
 	n, err := s.buf.Write([]byte(data))
 	if err != nil {
-		return 0, err
-	}
-	if n == 0 {
-		return n, errors.New("Wrote no bytes")
+		return n, err
 	}
 	err = s.buf.Flush()
 	if err != nil {
@@ -113,12 +105,36 @@ func (s *Client) send(data []byte) (int, error) {
 	return n, nil
 }
 
+// sends the data to the server endpoint over the net.Conn
+func (s *Client) StartSender() {
+	go func() {
+		for {
+			select {
+			case d := <-s.data:
+				_, err := s.send(d)
+				// ignore errors. Not sure what to do with an error here...
+				// just toss out a log
+				if err != nil {
+					fmt.Println("error: ", err)
+				}
+			case <-s.quit:
+				return
+			}
+		}
+	}()
+}
+
 func newClient(conn *net.Conn, prefix string) *Client {
 	buf := bufio.NewReadWriter(bufio.NewReader(*conn), bufio.NewWriter(*conn))
+	data := make(chan string, 100)
+	quit := make(chan bool)
 	client := &Client{
 		buf: buf,
 		conn: conn,
-		prefix: prefix}
+		prefix: prefix,
+		data: data,
+		quit: quit}
+	client.StartSender()
 	return client
 }
 

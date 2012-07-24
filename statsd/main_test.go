@@ -7,22 +7,27 @@ import (
 	//"fmt"
 )
 
-func NewTestClient(prefix string) (*Client, *bytes.Buffer) {
+func NewTestClient(prefix string) (*Client, *bytes.Buffer, chan bool) {
 	b := &bytes.Buffer{}
 	buf := bufio.NewReadWriter(bufio.NewReader(b), bufio.NewWriter(b))
-	f := &Client{buf: buf, prefix: prefix}
-	return f, b
+	// make data syncronous for testing
+	data := make(chan string)
+	quit := make(chan bool)
+	f := &Client{buf: buf, prefix: prefix, data: data, quit: quit}
+	f.StartSender()
+	return f, b, quit
 }
 
 
 func TestGuage(t *testing.T) {
-	f, buf := NewTestClient("test")
+	f, buf, q := NewTestClient("test")
 
 	err := f.Guage("guage", 1, 1.0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	q <- true
 	b := buf.String()
 	buf.Reset()
 	expected := "test.guage:1|g"
@@ -32,13 +37,14 @@ func TestGuage(t *testing.T) {
 }
 
 func TestIncRatio(t *testing.T) {
-	f, buf := NewTestClient("test")
+	f, buf, q := NewTestClient("test")
 
 	err := f.Inc("count", 1, 0.999999)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	q <- true
 	b := buf.String()
 	buf.Reset()
 	expected := "test.count:1|c|@0.999999"
@@ -48,13 +54,14 @@ func TestIncRatio(t *testing.T) {
 }
 
 func TestInc(t *testing.T) {
-	f, buf := NewTestClient("test")
+	f, buf, q := NewTestClient("test")
 
 	err := f.Inc("count", 1, 1.0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	q <- true
 	b := buf.String()
 	buf.Reset()
 	expected := "test.count:1|c"
@@ -64,13 +71,14 @@ func TestInc(t *testing.T) {
 }
 
 func TestDec(t *testing.T) {
-	f, buf := NewTestClient("test")
+	f, buf, q := NewTestClient("test")
 
 	err := f.Dec("count", 1, 1.0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	q <- true
 	b := buf.String()
 	buf.Reset()
 	expected := "test.count:-1|c"
@@ -80,13 +88,14 @@ func TestDec(t *testing.T) {
 }
 
 func TestTiming(t *testing.T) {
-	f, buf := NewTestClient("test")
+	f, buf, q := NewTestClient("test")
 
 	err := f.Timing("timing", 1, 1.0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	q <- true
 	b := buf.String()
 	buf.Reset()
 	expected := "test.timing:1|ms"
@@ -96,13 +105,14 @@ func TestTiming(t *testing.T) {
 }
 
 func TestEmptyPrefix(t *testing.T) {
-	f, buf := NewTestClient("")
+	f, buf, q := NewTestClient("")
 
 	err := f.Inc("count", 1, 1.0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	q <- true
 	b := buf.String()
 	buf.Reset()
 	expected := "count:1|c"
