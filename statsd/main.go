@@ -9,7 +9,7 @@ import (
 
 type Client struct {
 	// underlying connection
-	c  net.PacketConn
+	c net.PacketConn
 	// resolved udp address
 	ra *net.UDPAddr
 	// prefix for statsd name
@@ -66,6 +66,20 @@ func (s *Client) Timing(stat string, delta int64, rate float32) error {
 	return s.submit(stat, dap, rate)
 }
 
+// Submits a stats set type, where value is the unique string
+// rate is the sample rate (0.0 to 1.0).
+func (s *Client) UniqueString(stat string, value string, rate float32) error {
+	dap := fmt.Sprintf("%s|s", value)
+	return s.submit(stat, dap, rate)
+}
+
+// Submits a stats set type
+// rate is the sample rate (0.0 to 1.0).
+func (s *Client) UniqueInt64(stat string, value int64, rate float32) error {
+	dap := fmt.Sprintf("%d|s", value)
+	return s.submit(stat, dap, rate)
+}
+
 // Sets/Updates the statsd client prefix
 func (s *Client) SetPrefix(prefix string) {
 	s.prefix = prefix
@@ -113,7 +127,7 @@ func (s *Client) send(data []byte) (int, error) {
 // addr is a string of the format "hostname:port", and must be parsable by
 // net.ResolveUDPAddr.
 // prefix is the statsd client prefix. Can be "" if no prefix is desired.
-func New(addr, prefix string) (*Client,  error) {
+func New(addr, prefix string) (*Client, error) {
 	c, err := net.ListenPacket("udp", ":0")
 	if err != nil {
 		return nil, err
@@ -125,7 +139,7 @@ func New(addr, prefix string) (*Client,  error) {
 	}
 
 	client := &Client{
-		c:		c,
+		c:      c,
 		ra:     ra,
 		prefix: prefix}
 
